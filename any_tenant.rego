@@ -3,18 +3,28 @@ package permit.any_tenant
 import data.permit.root
 import future.keywords.in
 
+default use_factdb := false
+use_factdb := input.context.use_factdb
 default is_synced_user := false
 
+
 is_synced_user {
+  use_factdb
 	data.users[input.user.key]
 }
 
+
+default user_assignments := {}
+
+
+user_assignments := data.role_assignments[sprintf("user:%s", [input.user.key])]
+
+
 _associated_tenants[tenant_key] := tenant {
 	is_synced_user
-	user_assignments := data.role_assignments[sprintf("user:%s", [input.user.key])]
 	some assigned_object, _ in user_assignments
 	startswith(assigned_object, "__tenant:")
-	tenant_key := trim_left(assigned_object, "__tenant:")
+	tenant_key := trim_prefix(assigned_object, "__tenant:")
 	tenant := data.tenants[tenant_key]
 }
 
@@ -41,6 +51,7 @@ allowed_tenants[allowed_tenant] {
 	)
 	allowed_tenant := object.union(result, {"tenant": tenant_info})
 }
+
 
 # optimized version
 allowed_tenants[allowed_tenant] {
