@@ -1,17 +1,15 @@
+
 package permit.rbac
 
 import future.keywords
 
-# Santizied query
-input_query := {
-	"action": input.action,
-	"user": {"key": input.user.key},
-	"resource": {
-		#			"key": input.resource.key,
-		"type": input.resource.type,
-		"tenant": input.resource.tenant,
-	},
-}
+default use_factdb := false
+use_factdb := input.context.use_factdb
+
+default user_identifier := ""
+default tenant_identifier := ""
+user_identifier := sprintf("user:%s",[input.user.key])
+tenant_identifier := sprintf("__tenant:%s",[input.resource.tenant])
 
 # By default, deny requests.
 default allow := false
@@ -26,24 +24,22 @@ matching_grants[grant] {
 	some grant in grants
 
 	# Check if the grant permits the action.
-	input_query.action == grant
+	input.action == grant
 }
 
 tenant := tenant_key {
-	input_query.resource.tenant != null
-	tenant_key := input_query.resource.tenant
+	input.resource.tenant != null
+	tenant_key := input.resource.tenant
 }
 
-#tenant := tenant_key {
-#	q.resource.tenant == null
-#	q.resource.key != null
-#	q.resource.type != null
-#	data.resources[q.resource.type]
-#	tenant_key := data.resources[q.resource.type][q.resource.key].tenant
-#}
+user_roles[role_key] {
+  use_factdb
+	some role_key in input.context.data.role_assignments[user_identifier][tenant_identifier]
+}
 
 user_roles[role_key] {
-	some role_key in data.users[input_query.user.key].roleAssignments[tenant]
+  not use_factdb
+  some role_key in data.users[input.user.key].roleAssignments[tenant]
 }
 
 default roles_resource := "__tenant"
@@ -52,10 +48,11 @@ roles_resource := data.roles_resource
 
 grants[grant] {
 	some role_key in user_roles
-	some grant in data.role_permissions[roles_resource][role_key].grants[input_query.resource.type]
+	some grant in data.role_permissions[roles_resource][role_key].grants[input.resource.type]
 }
 
 allowing_roles[role_key] {
 	some role_key in user_roles
-	input.action in data.role_permissions[roles_resource][role_key].grants[input_query.resource.type]
+	input.action in data.role_permissions[roles_resource][role_key].grants[input.resource.type]
 }
+
